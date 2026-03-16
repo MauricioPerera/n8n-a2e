@@ -1,6 +1,6 @@
 # n8n-a2e — Agent-to-n8n Workflow Composer
 
-**Powered by [Context-Time Training (CTT)](https://doi.org/10.5281/zenodo.15189583)** — the production validation of entity-based memory architecture applied to n8n automation.
+**Powered by [Context-Time Training (CTT)](https://github.com/MauricioPerera/repomemory-v2)** — the production validation of entity-based memory architecture applied to n8n automation.
 
 > **Key finding:** A 1B-parameter model achieves 86% deploy-ready workflows with three lightweight guard rails (feedback loop + plan normalizer + inline retry). Small models fail on format, not logic — structured error feedback closes the gap without fine-tuning or larger models.
 
@@ -104,7 +104,7 @@ Goal (natural language)
 Active workflow in n8n
 ```
 
-**Production validation of [Context-Time Training (CTT)](https://doi.org/10.5281/zenodo.15189583)** and RepoMemory v2's A2E protocol, with key adaptations:
+**Production validation of [Context-Time Training (CTT)](https://github.com/MauricioPerera/repomemory-v2)** and RepoMemory v2's A2E protocol, with key adaptations:
 - **8 A2E primitives** (ApiCall, FilterData, etc.) replaced by **436+ real n8n nodes**
 - **JSONL output** replaced by **native n8n workflow JSON**
 - **Circuit breaker** with anti-pattern injection into LLM prompts (CTT feedback loop)
