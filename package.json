@@ -1,0 +1,21 @@
+{
+  "name": "@n8n-a2e/core",
+  "version": "0.1.0",
+  "description": "Agent-to-n8n: AI agent that composes and deploys n8n workflows from natural language",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "extract": "node dist/extractor/cli.js",
+    "start": "node dist/cli.js",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "keywords": ["n8n", "workflow", "agent", "automation", "a2e"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
