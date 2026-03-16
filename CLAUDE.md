@@ -28,8 +28,9 @@ src/
   eval/         → Model evaluation framework + benchmark goals
   seeds/        → Built-in workflow patterns
   mcp/          → MCP server (6 tools)
+  web/          → Web UI (zero-dependency HTTP server + chat interface)
   tests/        → Unit tests (feedback loop, normalizer)
-  cli/          → CLI + interactive chat + autonomous mode
+  cli/          → CLI + interactive chat + autonomous + web mode
 ```
 
 ## Commands
@@ -43,6 +44,7 @@ node dist/cli/cli.js chat        # Interactive chat mode
 node dist/cli/cli.js auto "goal" # Autonomous mode: compose + deploy + learn (no human)
 node dist/cli/cli.js deploy <f>  # Deploy workflow JSON
 node dist/cli/cli.js seed        # Seed workflow patterns
+node dist/cli/cli.js web         # Start web UI (port 3000)
 node dist/cli/cli.js mcp         # Start MCP server
 node dist/cli/cli.js stats       # Show store statistics
 ```

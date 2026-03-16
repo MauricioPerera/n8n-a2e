@@ -59,6 +59,9 @@ node dist/cli/cli.js seed
 # Interactive chat (requires LLM provider)
 node dist/cli/cli.js chat
 
+# Web UI
+node dist/cli/cli.js web
+
 # Autonomous mode — no human in the loop
 node dist/cli/cli.js auto "Create a webhook that responds with hello world"
 
@@ -556,6 +559,7 @@ Calls `GET /types/nodes.json` on the n8n internal API to get full node type desc
 | `auto "goal" [...]` | Autonomous: compose + deploy + learn, no human in loop |
 | `deploy <file.json>` | Deploy workflow JSON to n8n |
 | `seed` | Load 8 built-in workflow patterns |
+| `web [port]` | Start web UI (default port 3000) |
 | `mcp` | Start MCP server on stdio |
 | `stats` | Show store statistics |
 

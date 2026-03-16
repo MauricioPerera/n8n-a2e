@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>n8n-a2e</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --font: 'Segoe UI', -apple-system, sans-serif;
+    --mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  header .stats {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  header .stats span { color: var(--green); font-weight: 600; }
+
+  .btn-reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .btn-reset:hover { border-color: var(--text-muted); color: var(--text); }
+
+  /* Chat area */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    background: #1f6feb;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg.agent {
+    align-self: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .msg.error {
+    background: rgba(248, 81, 73, 0.1);
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .msg .action-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+  }
+
+  .badge-plan { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+  .badge-deploy { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .badge-error { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+  .badge-chat { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+
+  /* Workflow preview */
+  .workflow-preview {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    max-height: 200px;
+    overflow-y: auto;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .workflow-preview:hover { background: rgba(0,0,0,0.5); }
+
+  .workflow-preview .copy-hint {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .workflow-preview:hover .copy-hint { opacity: 1; }
+
+  /* Node pills */
+  .node-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .node-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(88, 166, 255, 0.1);
+    color: var(--accent);
+    border: 1px solid rgba(88, 166, 255, 0.2);
+  }
+
+  /* Input area */
+  #input-area {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    gap: 8px;
+  }
+
+  #input-area textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-family: var(--font);
+    font-size: 14px;
+    resize: none;
+    outline: none;
+    min-height: 44px;
+    max-height: 120px;
+  }
+
+  #input-area textarea:focus { border-color: var(--accent); }
+
+  #input-area textarea::placeholder { color: var(--text-muted); }
+
+  #send-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  #send-btn:hover { opacity: 0.9; }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Loading dot animation */
+  .loading {
+    display: flex;
+    gap: 4px;
+    padding: 14px;
+  }
+
+  .loading span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: bounce 1.2s infinite;
+  }
+
+  .loading span:nth-child(2) { animation-delay: 0.2s; }
+  .loading span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  /* Quick actions */
+  .quick-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .quick-btn {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .quick-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Welcome */
+  .welcome {
+    text-align: center;
+    color: var(--text-muted);
+    margin: auto;
+    max-width: 500px;
+  }
+
+  .welcome h2 { color: var(--text); font-size: 20px; margin-bottom: 8px; }
+  .welcome p { font-size: 14px; line-height: 1.6; }
+
+  .examples {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 16px;
+  }
+
+  .example-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font);
+  }
+
+  .example-btn:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>n8n-a2e</h1>
+  <div class="stats" id="stats">Loading...</div>
+  <button class="btn-reset" id="reset-btn" title="Reset conversation">Reset</button>
+</header>
+
+<div id="chat">
+  <div class="welcome" id="welcome">
+    <h2>n8n Workflow Composer</h2>
+    <p>Describe a workflow in natural language and I'll compose valid n8n JSON, ready to deploy.</p>
+    <div class="examples">
+      <button class="example-btn" data-msg="Create a webhook that returns a JSON greeting message">Webhook with JSON greeting</button>
+      <button class="example-btn" data-msg="Create a workflow that runs every hour and makes an HTTP GET request to an API">Scheduled HTTP request</button>
+      <button class="example-btn" data-msg="Create a webhook that receives data, filters items where status is active, and responds with the filtered results">Webhook with filter + response</button>
+      <button class="example-btn" data-msg="Create a webhook that receives a JSON payload. If type is urgent, send a Slack notification. Otherwise, save to a spreadsheet.">Conditional branching workflow</button>
+    </div>
+  </div>
+</div>
+
+<div id="input-area">
+  <textarea id="input" placeholder="Describe a workflow... (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+  <button id="send-btn">Send</button>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
+const welcome = document.getElementById('welcome');
+const resetBtn = document.getElementById('reset-btn');
+const statsEl = document.getElementById('stats');
+
+let busy = false;
+
+// Load stats
+fetch('/api/stats').then(r => r.json()).then(s => {
+  statsEl.innerHTML = `<span>${s.nodes}</span> nodes &middot; <span>${s.patterns}</span> patterns &middot; ${s.provider}`;
+}).catch(() => { statsEl.textContent = 'Offline'; });
+
+// Example buttons
+document.querySelectorAll('.example-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    input.value = btn.dataset.msg;
+    send();
+  });
+});
+
+// Reset
+resetBtn.addEventListener('click', async () => {
+  await fetch('/api/reset', { method: 'POST' });
+  chat.innerHTML = '';
+  chat.appendChild(welcome);
+  welcome.style.display = '';
+});
+
+// Auto-resize textarea
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+
+// Send on Enter
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+
+sendBtn.addEventListener('click', send);
+
+async function send() {
+  const msg = input.value.trim();
+  if (!msg || busy) return;
+
+  // Hide welcome
+  if (welcome.parentNode) welcome.style.display = 'none';
+
+  // Add user message
+  addMsg(msg, 'user');
+  input.value = '';
+  input.style.height = 'auto';
+
+  // Show loading
+  const loader = document.createElement('div');
+  loader.className = 'msg agent';
+  loader.innerHTML = '<div class="loading"><span></span><span></span><span></span></div>';
+  chat.appendChild(loader);
+  chat.scrollTop = chat.scrollHeight;
+
+  busy = true;
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    });
+    const data = await res.json();
+
+    loader.remove();
+
+    if (data.error) {
+      addMsg(data.error, 'agent error');
+      return;
+    }
+
+    addAgentMsg(data);
+  } catch (err) {
+    loader.remove();
+    addMsg('Connection error: ' + err.message, 'agent error');
+  } finally {
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function addMsg(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function addAgentMsg(data) {
+  const div = document.createElement('div');
+  div.className = 'msg agent';
+
+  // Action badge
+  const badgeClass = {
+    plan: 'badge-plan',
+    deploy: 'badge-deploy',
+    error: 'badge-error',
+    chat: 'badge-chat',
+  }[data.action] || 'badge-chat';
+
+  let html = `<div class="action-badge ${badgeClass}">${data.action}</div>\n`;
+  html += escapeHtml(data.message);
+
+  // Node pills for workflows
+  if (data.workflow && data.workflow.nodes) {
+    html += '<div class="node-pills">';
+    for (const node of data.workflow.nodes) {
+      html += `<span class="node-pill">${escapeHtml(node.name)}</span>`;
+    }
+    html += '</div>';
+  }
+
+  // Workflow JSON preview
+  if (data.workflow) {
+    const jsonStr = JSON.stringify(data.workflow, null, 2);
+    html += `<div class="workflow-preview" onclick="copyJson(this)" data-json='${escapeAttr(jsonStr)}'>`;
+    html += `<span class="copy-hint">Click to copy JSON</span>`;
+    html += escapeHtml(jsonStr.slice(0, 500));
+    if (jsonStr.length > 500) html += '\n...';
+    html += '</div>';
+  }
+
+  // Quick actions
+  if (data.action === 'plan' && data.workflow) {
+    html += '<div class="quick-actions">';
+    html += '<button class="quick-btn" onclick="quickSend(\'/deploy\')">Deploy</button>';
+    html += '<button class="quick-btn" onclick="quickSend(\'/json\')">Show JSON</button>';
+    html += '</div>';
+  }
+
+  if (data.action === 'deploy' && data.deployResult) {
+    html += '<div class="quick-actions">';
+    html += '<button class="quick-btn" onclick="quickSend(\'/activate\')">Activate</button>';
+    html += '</div>';
+  }
+
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function quickSend(msg) {
+  input.value = msg;
+  send();
+}
+
+function copyJson(el) {
+  const json = el.dataset.json;
+  navigator.clipboard.writeText(json).then(() => {
+    const hint = el.querySelector('.copy-hint');
+    if (hint) {
+      hint.textContent = 'Copied!';
+      setTimeout(() => hint.textContent = 'Click to copy JSON', 1500);
+    }
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

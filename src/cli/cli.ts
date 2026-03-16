@@ -22,6 +22,7 @@ import { extractFromSource } from '../extractor/extract-from-source.js';
 import { startChat } from './chat.js';
 import { seedPatterns } from '../seeds/patterns.js';
 import { startMcpServer } from '../mcp/server.js';
+import { startWebServer } from '../web/server.js';
 import { AutonomousAgent } from '../autonomous/autonomous-agent.js';
 import { createProvider, type ProviderType } from '../llm/provider.js';
 import { ModelEvaluator, type EvalModelConfig, type EvalGoal } from '../eval/evaluator.js';
@@ -457,6 +458,23 @@ async function main(): Promise<void> {
     case 'eval':
       await cmdEval(args);
       break;
+    case 'web':
+      {
+        const providerInfo = detectLlmProvider();
+        const port = args[0] ? parseInt(args[0], 10) : 3000;
+        startWebServer({
+          storePath: DEFAULT_STORE_PATH,
+          llmProvider: providerInfo.type,
+          llmConfig: providerInfo.config,
+          instance: getConfig() ? {
+            id: 'web', type: 'n8nInstance', createdAt: '', updatedAt: '', tags: [],
+            name: 'web', baseUrl: getConfig()!.baseUrl, apiKey: getConfig()!.apiKey,
+            availableNodes: [], availableCredentials: [],
+          } : undefined,
+          port,
+        });
+      }
+      break;
     case 'extract-source':
       {
         const repoPath = args[0] || resolve(process.cwd(), '..', 'n8n-source');
@@ -500,6 +518,7 @@ Usage:
   n8n-a2e chat                   Interactive chat mode (compose workflows via conversation)
   n8n-a2e auto "goal" [...]      Autonomous mode: compose + deploy + learn (no human in the loop)
   n8n-a2e eval [--models ...] [--goals ...]  Evaluate LLM models for workflow composition
+  n8n-a2e web [port]             Start web UI (default port: 3000)
   n8n-a2e seed                   Seed store with built-in workflow patterns
   n8n-a2e mcp                    Start MCP server (for Claude Code integration)
   n8n-a2e stats                  Show store statistics
