@@ -20,6 +20,13 @@ import { Store } from '../storage/store.js';
 import { Orchestrator } from '../agent/orchestrator.js';
 import { seedPatterns } from '../seeds/patterns.js';
 import type { NodeDefinition, WorkflowPattern, N8nInstance } from '../types/entities.js';
+import {
+  isCliAvailable,
+  listCliProfiles,
+  listCliCatalogs,
+  getCliProfile,
+  extractFromCliCatalog,
+} from '../extractor/extract-from-cli-catalog.js';
 
 const DEFAULT_STORE_PATH = resolve(process.cwd(), '.n8n-a2e', 'store');
 
@@ -145,6 +152,35 @@ const TOOLS: McpTool[] = [
         query: { type: 'string', description: 'Description of what the workflow should do' },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'get_credential_schema',
+    description: 'Get the required fields schema for a credential type (e.g. slackApi, openAiApi). Use before creating credentials to know what data is needed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        credentialType: { type: 'string', description: 'The credential type identifier (e.g. "openAiApi", "slackApi", "httpHeaderAuth")' },
+      },
+      required: ['credentialType'],
+    },
+  },
+  {
+    name: 'list_profiles',
+    description: 'List available n8n instance profiles from n8n-cli. Shows connection details and catalog status for each profile.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'refresh_node_catalog',
+    description: 'Re-extract all node definitions from the running n8n instance and update the local search index. Use after installing custom nodes and restarting n8n, so new nodes become searchable and usable in compose_workflow.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        profile: { type: 'string', description: 'n8n-cli profile name to sync from (uses default profile if omitted)' },
+      },
     },
   },
 ];
@@ -291,9 +327,109 @@ export class McpServer {
         return this.respondContent(request.id, context);
       }
 
+      case 'get_credential_schema': {
+        const credType = args.credentialType as string;
+        const instance = this.getInstanceConfig();
+        if (!instance) {
+          return this.respondContent(request.id, 'No n8n instance configured. Set N8N_BASE_URL + N8N_API_KEY or configure an n8n-cli profile.');
+        }
+        try {
+          const res = await fetch(`${instance.baseUrl}/api/v1/credentials/schema/${credType}`, {
+            headers: { 'X-N8N-API-KEY': instance.apiKey, 'Accept': 'application/json' },
+          });
+          if (!res.ok) {
+            return this.respondContent(request.id, `Failed to get schema for "${credType}": ${res.status} ${res.statusText}`);
+          }
+          const schema = await res.json();
+          return this.respondContent(request.id, JSON.stringify(schema, null, 2));
+        } catch (err) {
+          return this.respondContent(request.id, `Error fetching credential schema: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      case 'list_profiles': {
+        if (!isCliAvailable()) {
+          return this.respondContent(request.id, JSON.stringify({
+            available: false,
+            message: 'n8n-cli not installed. Using env vars or .n8n-a2e/config.json.',
+          }, null, 2));
+        }
+        const profiles = listCliProfiles();
+        const catalogs = listCliCatalogs();
+        const catalogMap = new Map(catalogs.map(c => [c.profileName, c]));
+        const result = profiles.map(p => ({
+          name: p.name,
+          baseUrl: p.baseUrl,
+          isDefault: p.isDefault,
+          catalog: catalogMap.get(p.name) ?? null,
+        }));
+        return this.respondContent(request.id, JSON.stringify(result, null, 2));
+      }
+
+      case 'refresh_node_catalog': {
+        const profileName = args.profile as string | undefined;
+
+        // Try n8n-cli catalog first (preferred — has full properties)
+        if (isCliAvailable()) {
+          const nodes = extractFromCliCatalog(profileName);
+          if (nodes && nodes.length > 0) {
+            const saved = this.store.saveBatch(nodes);
+            this.orchestrator.initialize(); // Re-index search
+            return this.respondContent(request.id, JSON.stringify({
+              source: 'n8n-cli catalog',
+              profile: profileName ?? '(default)',
+              nodesFound: nodes.length,
+              nodesSaved: saved.length,
+            }, null, 2));
+          }
+        }
+
+        // Fallback: extract from API directly
+        const instance = this.getInstanceConfig();
+        if (!instance) {
+          return this.respondContent(request.id, 'No n8n instance or n8n-cli profile available to refresh from.');
+        }
+        try {
+          const { extractFromInstance } = await import('../extractor/extract-from-api.js');
+          const nodes = await extractFromInstance(instance.baseUrl, instance.apiKey);
+          const saved = this.store.saveBatch(nodes);
+          this.orchestrator.initialize();
+          return this.respondContent(request.id, JSON.stringify({
+            source: 'n8n API',
+            baseUrl: instance.baseUrl,
+            nodesFound: nodes.length,
+            nodesSaved: saved.length,
+          }, null, 2));
+        } catch (err) {
+          return this.respondContent(request.id, `Failed to refresh: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       default:
         return this.error(request.id, -32602, `Unknown tool: ${name}`);
     }
+  }
+
+  /** Resolve n8n instance connection from env, config, or n8n-cli profile */
+  private getInstanceConfig(): { baseUrl: string; apiKey: string } | null {
+    // Check env vars
+    const baseUrl = process.env.N8N_BASE_URL || process.env.N8N_URL;
+    const apiKey = process.env.N8N_API_KEY;
+    if (baseUrl && apiKey) return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey };
+
+    // Check stored instance
+    const instances = this.store.list<N8nInstance>('n8nInstance');
+    if (instances.length > 0) {
+      return { baseUrl: instances[0].baseUrl, apiKey: instances[0].apiKey };
+    }
+
+    // Fall back to n8n-cli default profile
+    if (isCliAvailable()) {
+      const profile = getCliProfile();
+      if (profile) return { baseUrl: profile.baseUrl, apiKey: profile.apiKey };
+    }
+
+    return null;
   }
 
   private placeholderNode(n8nType: string, label?: string): NodeDefinition {

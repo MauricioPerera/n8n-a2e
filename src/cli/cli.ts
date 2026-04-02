@@ -19,6 +19,14 @@ import { Orchestrator } from '../agent/orchestrator.js';
 import { extractFromInstance, extractCredentials } from '../extractor/extract-from-api.js';
 import { extractFromGitHub } from '../extractor/extract-from-github.js';
 import { extractFromSource } from '../extractor/extract-from-source.js';
+import {
+  extractFromCliCatalog,
+  extractFromAllCliCatalogs,
+  isCliAvailable,
+  listCliProfiles,
+  listCliCatalogs,
+  getCliProfile,
+} from '../extractor/extract-from-cli-catalog.js';
 import { startChat } from './chat.js';
 import { seedPatterns } from '../seeds/patterns.js';
 import { startMcpServer } from '../mcp/server.js';
@@ -35,17 +43,23 @@ function getStore(): Store {
   return new Store({ root: DEFAULT_STORE_PATH });
 }
 
-function getConfig(): { baseUrl: string; apiKey: string } | null {
-  // Check env vars
+function getConfig(profileName?: string): { baseUrl: string; apiKey: string } | null {
+  // Check env vars (highest priority)
   const baseUrl = process.env.N8N_BASE_URL || process.env.N8N_URL;
   const apiKey = process.env.N8N_API_KEY;
   if (baseUrl && apiKey) return { baseUrl, apiKey };
 
-  // Check config file
+  // Check local .n8n-a2e config
   const configPath = resolve(process.cwd(), '.n8n-a2e', 'config.json');
   if (existsSync(configPath)) {
     const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    return { baseUrl: config.baseUrl, apiKey: config.apiKey };
+    if (config.baseUrl && config.apiKey) return { baseUrl: config.baseUrl, apiKey: config.apiKey };
+  }
+
+  // Fall back to n8n-cli profiles
+  if (isCliAvailable()) {
+    const profile = getCliProfile(profileName);
+    if (profile) return { baseUrl: profile.baseUrl, apiKey: profile.apiKey };
   }
 
   return null;
@@ -505,29 +519,122 @@ async function main(): Promise<void> {
         }
       }
       break;
+    case 'extract-cli':
+      {
+        if (!isCliAvailable()) {
+          console.error('n8n-cli not found. Install it and run "n8n-cli nodes sync" first.');
+          console.error('See: https://github.com/MauricioPerera/n8n-cli');
+          process.exit(1);
+        }
+
+        const profileArg = args[0] === '--all' ? undefined : (args[0] || undefined);
+        const store = getStore();
+
+        if (args[0] === '--all') {
+          // Import from ALL n8n-cli catalogs
+          const { nodes, profiles } = extractFromAllCliCatalogs();
+          if (nodes.length === 0) {
+            console.error('No n8n-cli catalogs found. Run "n8n-cli nodes sync" for each profile.');
+            process.exit(1);
+          }
+          console.log(`Found ${profiles.length} n8n-cli profile(s):`);
+          for (const p of profiles) {
+            console.log(`  ${p.name}: ${p.baseUrl} (${p.nodeCount} nodes, synced ${p.syncedAt})`);
+          }
+          const saved = store.saveBatch(nodes);
+          console.log(`\nSaved ${saved.length} node definitions from n8n-cli catalogs (${nodes.length} total, deduped).`);
+        } else {
+          // Import from a specific profile (or default)
+          const nodes = extractFromCliCatalog(profileArg);
+          if (!nodes || nodes.length === 0) {
+            const available = listCliCatalogs();
+            if (available.length > 0) {
+              console.error(`No catalog for profile '${profileArg || '(default)'}'. Available catalogs:`);
+              for (const c of available) {
+                console.log(`  ${c.profileName}: ${c.baseUrl} (${c.nodeCount} nodes)`);
+              }
+            } else {
+              console.error('No n8n-cli catalogs found. Run "n8n-cli nodes sync" first.');
+            }
+            process.exit(1);
+          }
+          const saved = store.saveBatch(nodes);
+          console.log(`Saved ${saved.length} node definitions from n8n-cli catalog.`);
+        }
+
+        // Show category breakdown
+        const allNodes = store.list<NodeDefinition>('nodeDefinition');
+        const cats = new Map<string, number>();
+        for (const n of allNodes) {
+          cats.set(n.category, (cats.get(n.category) ?? 0) + 1);
+        }
+        console.log('\nNode categories:');
+        for (const [cat, count] of [...cats.entries()].sort((a, b) => b[1] - a[1])) {
+          console.log(`  ${cat}: ${count}`);
+        }
+
+        // Show property richness
+        const withProps = allNodes.filter(n => n.properties.length > 0).length;
+        const withCreds = allNodes.filter(n => n.credentials.length > 0).length;
+        console.log(`\nProperty coverage: ${withProps}/${allNodes.length} nodes have parameter definitions`);
+        console.log(`Credential coverage: ${withCreds}/${allNodes.length} nodes have credential info`);
+      }
+      break;
+    case 'profiles':
+      {
+        if (!isCliAvailable()) {
+          console.log('n8n-cli not installed. No profiles available.');
+          console.log('Using env vars or .n8n-a2e/config.json for connection.');
+          break;
+        }
+        const profiles = listCliProfiles();
+        const catalogs = listCliCatalogs();
+        const catalogMap = new Map(catalogs.map(c => [c.profileName, c]));
+
+        console.log('n8n-cli profiles:\n');
+        for (const p of profiles) {
+          const catalog = catalogMap.get(p.name);
+          const status = catalog
+            ? `${catalog.nodeCount} nodes (synced ${catalog.syncedAt})`
+            : 'no catalog — run "n8n-cli --profile ' + p.name + ' nodes sync"';
+          console.log(`  ${p.isDefault ? '* ' : '  '}${p.name}: ${p.baseUrl}`);
+          console.log(`    ${status}`);
+        }
+        if (profiles.length === 0) {
+          console.log('  (none) — run "n8n-cli profile add <name> --base-url <url> --api-key <key>"');
+        }
+      }
+      break;
     default:
       console.log(`
 n8n-a2e - Agent-to-n8n Workflow Composer
 
 Usage:
-  n8n-a2e extract                Extract node definitions from n8n instance
-  n8n-a2e extract-source [path]  Extract from local n8n repo (includes AI/LangChain nodes)
-  n8n-a2e search <query>         Search for nodes matching a query
-  n8n-a2e context <query>        Generate LLM context for a query
-  n8n-a2e deploy <file.json>     Deploy a workflow JSON to n8n
-  n8n-a2e chat                   Interactive chat mode (compose workflows via conversation)
-  n8n-a2e auto "goal" [...]      Autonomous mode: compose + deploy + learn (no human in the loop)
-  n8n-a2e eval [--models ...] [--goals ...]  Evaluate LLM models for workflow composition
-  n8n-a2e web [port]             Start web UI (default port: 3000)
-  n8n-a2e seed                   Seed store with built-in workflow patterns
-  n8n-a2e mcp                    Start MCP server (for Claude Code integration)
-  n8n-a2e stats                  Show store statistics
+  n8n-a2e extract                  Extract node definitions from n8n instance (API)
+  n8n-a2e extract-cli [profile]    Extract from n8n-cli catalog (recommended, full properties)
+  n8n-a2e extract-cli --all        Extract from ALL n8n-cli catalogs (multi-instance)
+  n8n-a2e extract-github           Extract stubs from n8n GitHub repo (offline, no properties)
+  n8n-a2e extract-source [path]    Extract from local n8n repo (includes AI/LangChain nodes)
+  n8n-a2e profiles                 List n8n-cli profiles and catalog status
+  n8n-a2e search <query>           Search for nodes matching a query
+  n8n-a2e context <query>          Generate LLM context for a query
+  n8n-a2e deploy <file.json>       Deploy a workflow JSON to n8n
+  n8n-a2e chat                     Interactive chat mode
+  n8n-a2e auto "goal" [...]        Autonomous mode: compose + deploy + learn
+  n8n-a2e eval [--models ...] [--goals ...]  Evaluate LLM models
+  n8n-a2e web [port]               Start web UI (default port: 3000)
+  n8n-a2e seed                     Seed store with built-in workflow patterns
+  n8n-a2e mcp                      Start MCP server (for Claude Code integration)
+  n8n-a2e stats                    Show store statistics
 
-Environment:
-  N8N_BASE_URL    n8n instance URL (e.g. http://localhost:5678)
-  N8N_API_KEY     n8n API key
-  ANTHROPIC_API_KEY  For Claude LLM (default)
-  OPENAI_API_KEY     For OpenAI LLM
+Connection (priority order):
+  1. Environment: N8N_BASE_URL + N8N_API_KEY
+  2. Local config: .n8n-a2e/config.json
+  3. n8n-cli profiles: ~/.n8n-cli/config.json (multi-instance)
+
+LLM providers:
+  ANTHROPIC_API_KEY  For Claude (default)
+  OPENAI_API_KEY     For OpenAI
   OLLAMA_MODEL       For local Ollama (fallback, no key needed)
       `);
   }
