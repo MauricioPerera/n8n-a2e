@@ -71,6 +71,12 @@ export function normalizeResponse(raw: string): NormalizeResult {
   fixed = fixed.replace(/,\s*([\]}])/g, '$1');
   if (fixed !== beforeTrailing) fixes.push('removed trailing commas');
 
+  // Fix triple closing braces }}} → }} (common with small LLMs like LFM2.5)
+  // The model generates "parameters": {}}} where the extra } breaks the array element
+  const beforeTripleBrace = fixed;
+  fixed = fixed.replace(/\}\s*\}\s*\}/g, '}}');
+  if (fixed !== beforeTripleBrace) fixes.push('fixed extra closing braces');
+
   // Fix single quotes to double quotes (careful with content strings)
   // Only fix quotes around keys and simple values, not inside strings
   const beforeQuotes = fixed;
