@@ -29,7 +29,7 @@ function collectionDir(root: string, type: EntityType): string {
 }
 
 export class Store {
-  private root: string;
+  readonly root: string;
 
   constructor(config: StoreConfig) {
     this.root = config.root;

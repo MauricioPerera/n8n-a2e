@@ -56,7 +56,7 @@ const STOP_WORDS = new Set([
   'of', 'no', 'not', 'this', 'that', 'these', 'those', 'it', 'its',
 ]);
 
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -83,7 +83,7 @@ const EXPANSIONS: Record<string, string[]> = {
   'storage': ['s3', 'gcs', 'azure', 'drive', 'dropbox', 'minio'],
 };
 
-function expandQuery(tokens: string[]): string[] {
+export function expandQuery(tokens: string[]): string[] {
   const expanded = new Set(tokens);
   for (const token of tokens) {
     const synonyms = EXPANSIONS[token];
@@ -121,7 +121,7 @@ export class SearchEngine {
     this.totalDocs = entities.length;
 
     for (const entity of entities) {
-      const text = this.entityToText(entity);
+      const text = SearchEngine.entityToText(entity);
       const tokens = tokenize(text);
       const tf = new Map<string, number>();
 
@@ -185,8 +185,8 @@ export class SearchEngine {
       .slice(0, limit);
   }
 
-  /** Convert entity to searchable text */
-  private entityToText(entity: Entity): string {
+  /** Convert entity to searchable text (public for embedding reuse) */
+  static entityToText(entity: Entity): string {
     switch (entity.type) {
       case 'nodeDefinition': {
         const n = entity as NodeDefinition;

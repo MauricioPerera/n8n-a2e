@@ -15,6 +15,7 @@ import { resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { Store } from '../storage/store.js';
 import { SearchEngine } from '../search/tfidf.js';
+import { HybridSearchEngine } from '../search/hybrid.js';
 import { Orchestrator } from '../agent/orchestrator.js';
 import { extractFromInstance, extractCredentials } from '../extractor/extract-from-api.js';
 import { extractFromGitHub } from '../extractor/extract-from-github.js';
@@ -124,11 +125,14 @@ function cmdSearch(query: string): void {
     process.exit(1);
   }
 
-  const engine = new SearchEngine();
+  const vectorDir = resolve(DEFAULT_STORE_PATH, 'vectors');
+  const engine = new HybridSearchEngine(vectorDir);
   engine.index(allEntities);
 
+  const hasVectors = engine.hasVectorIndex();
   const results = engine.search(query, 15);
-  console.log(`\nSearch: "${query}" → ${results.length} results\n`);
+  const mode = hasVectors ? 'hybrid (TF-IDF + vector)' : 'TF-IDF only';
+  console.log(`\nSearch: "${query}" → ${results.length} results [${mode}]\n`);
 
   for (const r of results) {
     const score = r.score.toFixed(3);
@@ -448,6 +452,37 @@ async function main(): Promise<void> {
     case 'deploy':
       await cmdDeploy(args[0]);
       break;
+    case 'embed':
+      {
+        const store = getStore();
+        const nodes = store.list<NodeDefinition>('nodeDefinition');
+        const patterns = store.list<WorkflowPattern>('workflowPattern');
+        const allEntities = [...nodes, ...patterns];
+
+        if (allEntities.length === 0) {
+          console.error('Store is empty. Run "extract-cli" or "extract" first.');
+          process.exit(1);
+        }
+
+        const modelArg = args.indexOf('--model');
+        const model = modelArg !== -1 ? args[modelArg + 1] : undefined;
+        const verbose = !args.includes('--quiet');
+
+        console.log(`Generating embeddings for ${allEntities.length} entities...`);
+        const start = Date.now();
+
+        const { generateEmbeddings } = await import('../search/embedder.js');
+        const result = await generateEmbeddings(allEntities, {
+          storePath: DEFAULT_STORE_PATH,
+          model,
+          verbose,
+        });
+
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(`\nEmbedded ${result.nodeCount} nodes + ${result.patternCount} patterns + ${result.queryCount} query phrases in ${elapsed}s`);
+        console.log(`Vectors stored at: ${result.vectorDir}`);
+      }
+      break;
     case 'chat':
       await startChat();
       break;
@@ -615,8 +650,9 @@ Usage:
   n8n-a2e extract-cli --all        Extract from ALL n8n-cli catalogs (multi-instance)
   n8n-a2e extract-github           Extract stubs from n8n GitHub repo (offline, no properties)
   n8n-a2e extract-source [path]    Extract from local n8n repo (includes AI/LangChain nodes)
+  n8n-a2e embed [--model <name>]    Generate vector embeddings (requires @huggingface/transformers)
   n8n-a2e profiles                 List n8n-cli profiles and catalog status
-  n8n-a2e search <query>           Search for nodes matching a query
+  n8n-a2e search <query>           Search for nodes (hybrid TF-IDF + vector if embedded)
   n8n-a2e context <query>          Generate LLM context for a query
   n8n-a2e deploy <file.json>       Deploy a workflow JSON to n8n
   n8n-a2e chat                     Interactive chat mode

@@ -8,8 +8,10 @@
  * context and tools that an LLM agent needs to compose workflows.
  */
 
+import { resolve } from 'node:path';
 import { Store } from '../storage/store.js';
 import { SearchEngine, type SearchResult } from '../search/tfidf.js';
+import { HybridSearchEngine } from '../search/hybrid.js';
 import { composeWorkflow, type ComposeOptions, type ComposerNode, type ComposerConnection } from '../composer/compose.js';
 import { validateWorkflow, type ValidationResult } from '../composer/validate.js';
 import { matchCredentials, fetchCredentials, type CredentialMatchResult, type CredentialBinding } from '../composer/credential-matcher.js';
@@ -75,7 +77,7 @@ export interface DeployResult {
 
 export class Orchestrator {
   private store: Store;
-  private search: SearchEngine;
+  private search: HybridSearchEngine;
   private client: N8nClient | null = null;
   private instance: N8nInstance | null = null;
   private nodeDefMap: Map<string, NodeDefinition> = new Map();
@@ -84,7 +86,8 @@ export class Orchestrator {
 
   constructor(config: AgentConfig) {
     this.store = config.store;
-    this.search = new SearchEngine();
+    const vectorDir = resolve(this.store.root, 'vectors');
+    this.search = new HybridSearchEngine(vectorDir);
 
     if (config.instance) {
       this.setInstance(config.instance);

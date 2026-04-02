@@ -6,16 +6,24 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/search/js-vector-store.js dist/search/js-vector-store.js",
     "dev": "tsc --watch",
     "extract": "node dist/extractor/cli.js",
     "start": "node dist/cli.js",
+    "embed": "node dist/cli/cli.js embed",
     "test": "node --test dist/**/*.test.js"
   },
-  "keywords": ["n8n", "workflow", "agent", "automation", "a2e"],
+  "keywords": [
+    "n8n",
+    "workflow",
+    "agent",
+    "automation",
+    "a2e"
+  ],
   "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@huggingface/transformers": "^4.0.1",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
   }
 }
