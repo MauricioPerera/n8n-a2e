@@ -44,8 +44,16 @@ function getStore(): Store {
   return new Store({ root: DEFAULT_STORE_PATH });
 }
 
-function getConfig(profileName?: string): { baseUrl: string; apiKey: string } | null {
-  // Check env vars (highest priority)
+function getConfig(profileName?: string): { baseUrl: string; apiKey: string; profileName?: string } | null {
+  const profile = profileName ?? _selectedProfile;
+
+  // If a profile is explicitly selected, use n8n-cli profile directly (skip env/config)
+  if (profile && isCliAvailable()) {
+    const p = getCliProfile(profile);
+    if (p) return { baseUrl: p.baseUrl, apiKey: p.apiKey, profileName: profile };
+  }
+
+  // Check env vars
   const baseUrl = process.env.N8N_BASE_URL || process.env.N8N_URL;
   const apiKey = process.env.N8N_API_KEY;
   if (baseUrl && apiKey) return { baseUrl, apiKey };
@@ -57,10 +65,10 @@ function getConfig(profileName?: string): { baseUrl: string; apiKey: string } | 
     if (config.baseUrl && config.apiKey) return { baseUrl: config.baseUrl, apiKey: config.apiKey };
   }
 
-  // Fall back to n8n-cli profiles
+  // Fall back to n8n-cli default profile
   if (isCliAvailable()) {
-    const profile = getCliProfile(profileName);
-    if (profile) return { baseUrl: profile.baseUrl, apiKey: profile.apiKey };
+    const p = getCliProfile();
+    if (p) return { baseUrl: p.baseUrl, apiKey: p.apiKey, profileName: '(default)' };
   }
 
   return null;
@@ -69,11 +77,12 @@ function getConfig(profileName?: string): { baseUrl: string; apiKey: string } | 
 async function cmdExtract(): Promise<void> {
   const config = getConfig();
   if (!config) {
-    console.error('Error: Set N8N_BASE_URL and N8N_API_KEY env vars, or create .n8n-a2e/config.json');
+    console.error('Error: No n8n connection configured.');
+    console.error('Use --profile <name>, set N8N_BASE_URL + N8N_API_KEY, or configure n8n-cli profiles.');
     process.exit(1);
   }
 
-  console.log(`Extracting nodes from ${config.baseUrl}...`);
+  console.log(`Extracting nodes from ${config.baseUrl}${config.profileName ? ` (profile: ${config.profileName})` : ''}...`);
 
   const store = getStore();
   const nodes = await extractFromInstance(config.baseUrl, config.apiKey);
@@ -171,9 +180,11 @@ function cmdContext(query: string): void {
 async function cmdDeploy(filePath: string): Promise<void> {
   const config = getConfig();
   if (!config) {
-    console.error('Error: Set N8N_BASE_URL and N8N_API_KEY env vars.');
+    console.error('Error: No n8n connection configured.');
+    console.error('Use --profile <name>, set N8N_BASE_URL + N8N_API_KEY, or configure n8n-cli profiles.');
     process.exit(1);
   }
+  console.log(`Deploying to: ${config.baseUrl}${config.profileName ? ` (profile: ${config.profileName})` : ''}`);
 
   const absPath = resolve(filePath);
   if (!existsSync(absPath)) {
@@ -271,7 +282,7 @@ async function cmdAuto(goals: string[]): Promise<void> {
 
   console.log(`\n🤖 Autonomous Mode`);
   console.log(`  LLM: ${providerInfo.type}`);
-  console.log(`  n8n: ${config.baseUrl}`);
+  console.log(`  n8n: ${config.baseUrl}${config.profileName ? ` (profile: ${config.profileName})` : ''}`);
   console.log(`  Goals: ${goals.length}\n`);
 
   const agent = new AutonomousAgent({
@@ -414,10 +425,33 @@ function parseGoalFilter(args: string[]): string[] | null {
   return null;
 }
 
+// ─── Global --profile flag ──────────────────────────────────────────────────
+
+let _selectedProfile: string | undefined;
+
+function parseGlobalFlags(argv: string[]): { command: string | undefined; args: string[] } {
+  const filtered: string[] = [];
+  let command: string | undefined;
+  let skipNext = false;
+
+  for (let i = 2; i < argv.length; i++) {
+    if (skipNext) { skipNext = false; continue; }
+    if (argv[i] === '--profile' && argv[i + 1]) {
+      _selectedProfile = argv[i + 1];
+      skipNext = true;
+    } else if (!command) {
+      command = argv[i];
+    } else {
+      filtered.push(argv[i]);
+    }
+  }
+  return { command, args: filtered };
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const [, , command, ...args] = process.argv;
+  const { command, args } = parseGlobalFlags(process.argv);
 
   switch (command) {
     case 'extract':
